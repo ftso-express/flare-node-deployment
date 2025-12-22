@@ -1,0 +1,104 @@
+---
+
+name: "${X_DOCKER_COMPOSE_NAME}"
+# networks:
+# x-network-settings: &network-settings
+
+x-common-labels: &common-labels
+  production_status: ${X_LABELS_PRODUCTION_STATUS}
+  network_name: ${X_LABELS_NETWORK_NAME}
+  network_type: ${X_LABELS_NETWORK_TYPE}
+  node_role: ${X_LABELS_NODE_ROLE}
+  node_name: ${X_LABELS_NODE_NAME}
+  sub_system_key: ${X_LABELS_SUB_SYSTEM_KEY}
+  sub_system_name: ${X_LABELS_SUB_SYSTEM_NAME}
+
+x-logging-settings-fluentd: &logging-settings-fluentd
+  logging:
+    driver: fluentd
+    options:
+      # fluentd-address: "${X_FLUENTD_PROTOCOL}://${X_FLUENTD_HOST}:${X_FLUENTD_PORT}" # Logstash UDP input port
+      fluentd-address: "${X_FLUENTD_HOST}:${X_FLUENTD_PORT}" # Logstash UDP input port      
+      tag: "${X_FLUENTD_TAG}"
+      labels: "${X_FLUENTD_LABELS}"
+      env: "${X_FLUENTD_ENV}"
+
+x-logging-settings-gelf: &logging-settings-gelf
+  logging:
+    driver: gelf
+    options:
+      gelf-address: "${X_GRAYLOG_PROTOCOL}://${X_GRAYLOG_HOST}:${X_GRAYLOG_PORT}" # Logstash UDP input port      
+      tag: "${X_GRAYLOG_TAG}"
+      gelf-compression-type: none
+      labels: "${X_GRAYLOG_LABELS}"
+      env: "${X_GRAYLOG_ENV}"
+
+x-logging-settings-local: &logging-settings-local
+  logging: 
+    driver: "local" 
+    options: 
+      max-size: "10m" 
+      max-file: "3"
+
+x-logging-settings-json: &logging-settings-json
+  logging: 
+    driver: "json-file"
+    options: 
+      max-size: "10m" 
+      max-file: "3"
+      labels: "production_status,network_name,network_type"
+      env: "os,customer"
+
+x-logging-settings-journald: &logging-settings-journald
+  logging: 
+    driver: "journald" 
+    options:
+      tag: "{{.ImageName}}/{{.Name}}/{{.ID}}"
+      labels: "production_status,network_name,network_type"
+      env: "os,customer"
+
+x-general-settings: &general-settings
+  restart: unless-stopped
+  stdin_open: true # docker run -i
+  tty: true        # docker run -t
+  env_file: 
+    - ./node/node.env
+
+services:
+  node:
+    image: ${X_DOCKER_COMPOSE_IMAGE}
+    hostname: ${X_DOCKER_COMPOSE_NAME}
+    container_name: "${X_DOCKER_COMPOSE_NAME}"
+    <<: [ *logging-settings-local, *general-settings ]
+    ports:
+      - ${X_DOCKER_COMPOSE_NETWORK_INTERFACE_ADDRESS}:${X_PORT_HTTP_PUBLISHED}:${X_PORT_HTTP_TARGETED}
+      - ${X_DOCKER_COMPOSE_NETWORK_INTERFACE_ADDRESS}:${X_PORT_STAKING_PUBLISHED}:${X_PORT_STAKING_TARGETED}
+    volumes:
+      - node-data:${X_VOLUME_NODE_DATA_TARGET:-/app/db}
+      - node-logs:${X_VOLUME_NODE_LOGS_TARGET:-/app/logs}
+      - ./node/configs/flare:${X_CHAIN_CONFIG_DIR:-/app/conf}
+      - ./node/certs/staking/:/root/.avalanchego/staking/
+      - ./node/entrypoint.sh:/app/entrypoint.sh
+    labels:
+      <<: *common-labels
+
+volumes:
+  node-data:
+    name: "${X_VOLUME_NODE_DATA_NAME}"
+    driver: local # Define the driver and options under the volume name
+    driver_opts:
+      type: none
+      device: "${X_VOLUME_NODE_DATA_DEVICE}"
+      o: bind
+    labels:
+      <<: *common-labels
+    
+  node-logs:
+    name: "${X_VOLUME_NODE_LOGS_NAME}"
+    driver: local # Define the driver and options under the volume name
+    driver_opts:
+      type: none
+      device: "${X_VOLUME_NODE_LOGS_DEVICE}"
+      o: bind
+    labels:
+      <<: *common-labels

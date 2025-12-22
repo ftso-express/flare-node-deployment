@@ -1,37 +1,37 @@
 ---
 
-name: "${DOCKER_COMPOSE_NAME}"
+name: "${X_DOCKER_COMPOSE_NAME}"
 # networks:
 # x-network-settings: &network-settings
 
 x-common-labels: &common-labels
-  production_status: ${LABELS_PRODUCTION_STATUS}
-  network_name: ${LABELS_NETWORK_NAME}
-  network_type: ${LABELS_NETWORK_TYPE}
-  node_role: ${LABELS_NODE_ROLE}
-  node_name: ${LABELS_NODE_NAME}
-  sub_system_key: ${LABELS_SUB_SYSTEM_KEY}
-  sub_system_name: ${LABELS_SUB_SYSTEM_NAME}
+  production_status: ${X_LABELS_PRODUCTION_STATUS}
+  network_name: ${X_LABELS_NETWORK_NAME}
+  network_type: ${X_LABELS_NETWORK_TYPE}
+  node_role: ${X_LABELS_NODE_ROLE}
+  node_name: ${X_LABELS_NODE_NAME}
+  sub_system_key: ${X_LABELS_SUB_SYSTEM_KEY}
+  sub_system_name: ${X_LABELS_SUB_SYSTEM_NAME}
 
 x-logging-settings-fluentd: &logging-settings-fluentd
   logging:
     driver: fluentd
     options:
-      # fluentd-address: "${FLUENTD_PROTOCOL}://${FLUENTD_HOST}:${FLUENTD_PORT}" # Logstash UDP input port
-      fluentd-address: "${FLUENTD_HOST}:${FLUENTD_PORT}" # Logstash UDP input port      
-      tag: "${FLUENTD_TAG}"
-      labels: "${FLUENTD_LABELS}"
-      env: "${FLUENTD_ENV}"
+      # fluentd-address: "${X_FLUENTD_PROTOCOL}://${X_FLUENTD_HOST}:${X_FLUENTD_PORT}" # Logstash UDP input port
+      fluentd-address: "${X_FLUENTD_HOST}:${X_FLUENTD_PORT}" # Logstash UDP input port      
+      tag: "${X_FLUENTD_TAG}"
+      labels: "${X_FLUENTD_LABELS}"
+      env: "${X_FLUENTD_ENV}"
 
 x-logging-settings-gelf: &logging-settings-gelf
   logging:
     driver: gelf
     options:
-      gelf-address: "${GRAYLOG_PROTOCOL}://${GRAYLOG_HOST}:${GRAYLOG_PORT}" # Logstash UDP input port      
-      tag: "${GRAYLOG_TAG}"
+      gelf-address: "${X_GRAYLOG_PROTOCOL}://${X_GRAYLOG_HOST}:${X_GRAYLOG_PORT}" # Logstash UDP input port      
+      tag: "${X_GRAYLOG_TAG}"
       gelf-compression-type: none
-      labels: "${GRAYLOG_LABELS}"
-      env: "${GRAYLOG_ENV}"
+      labels: "${X_GRAYLOG_LABELS}"
+      env: "${X_GRAYLOG_ENV}"
 
 x-logging-settings-local: &logging-settings-local
   logging: 
@@ -62,47 +62,43 @@ x-general-settings: &general-settings
   stdin_open: true # docker run -i
   tty: true        # docker run -t
   env_file: 
-    - ./app/app.env
+    - ./node/node.env
 
 services:
   node:
-    image: ${DOCKER_COMPOSE_IMAGE}
-    hostname: ${DOCKER_COMPOSE_NAME}
-    container_name: "${DOCKER_COMPOSE_NAME}"
+    image: ${X_DOCKER_COMPOSE_IMAGE}
+    hostname: ${X_DOCKER_COMPOSE_NAME}
+    container_name: "${X_DOCKER_COMPOSE_NAME}"
     <<: [ *logging-settings-local, *general-settings ]
-    environment:
-      - NODE_ID=NodeID-GAvjLY4B3p7abu1ssX7kSqB27mwXV9c5G
-      - CHECK_NODE_ID_CONFLICT=1    # Entrypoint.sh has NODE_ID Conflict logic
-      - ALLOW_NODE_ID_CONFLICT=0
     ports:
-      - ${DOCKER_COMPOSE_NETWORK_INTERFACE_ADDRESS}:${PORT_HTTP_PUBLISHED}:${PORT_HTTP_TARGETED}
-      - ${DOCKER_COMPOSE_NETWORK_INTERFACE_ADDRESS}:${PORT_STAKING_PUBLISHED}:${PORT_STAKING_TARGETED}
+      - ${X_DOCKER_COMPOSE_NETWORK_INTERFACE_ADDRESS}:${X_PORT_HTTP_PUBLISHED}:${X_PORT_HTTP_TARGETED}
+      - ${X_DOCKER_COMPOSE_NETWORK_INTERFACE_ADDRESS}:${X_PORT_STAKING_PUBLISHED}:${X_PORT_STAKING_TARGETED}
     volumes:
-      - node-data:${VOLUME_NODE_DATA_TARGET:-/app/db}
-      - node-logs:${VOLUME_NODE_LOGS_TARGET:-/app/logs}
-      - ./app/configs:${CHAIN_CONFIG_DIR:-/app/conf}
-      - ./app/certs/staking/:/root/.avalanchego/staking/
-      - ./app/entrypoint.sh:/app/entrypoint.sh
+      - node-data:${X_VOLUME_NODE_DATA_TARGET:-/app/db}
+      - node-logs:${X_VOLUME_NODE_LOGS_TARGET:-/app/logs}
+      - ./node/configs:${X_CHAIN_CONFIG_DIR:-/app/conf}
+      - ./node/certs/staking/:/root/.avalanchego/staking/
+      - ./node/entrypoint.sh:/app/entrypoint.sh
     labels:
       <<: *common-labels
 
 volumes:
   node-data:
-    name: "${VOLUME_NODE_DATA_NAME}"
-      #driver: local # Define the driver and options under the volume name
-      #driver_opts:
-      #  type: none
-      #  device: "${VOLUME_NODE_DATA_DEVICE}"
-      #  o: bind
-      #labels:
-      #  <<: *common-labels
-    
+    name: "${X_VOLUME_NODE_DATA_NAME}"
+    driver: local # Define the driver and options under the volume name
+    driver_opts:
+      type: none
+      device: "${X_VOLUME_NODE_DATA_DEVICE}"
+      o: bind
+    labels:
+      <<: *common-labels
+
   node-logs:
-    name: "${VOLUME_NODE_LOGS_NAME}"
-      #driver: local # Define the driver and options under the volume name
-      #driver_opts:
-      #  type: none
-      #  device: "${VOLUME_NODE_LOGS_DEVICE}"
-      #  o: bind
-      #labels:
-      #  <<: *common-labels
+    name: "${X_VOLUME_NODE_LOGS_NAME}"
+    driver: local # Define the driver and options under the volume name
+    driver_opts:
+      type: none
+      device: "${X_VOLUME_NODE_LOGS_DEVICE}"
+      o: bind
+    labels:
+      <<: *common-labels

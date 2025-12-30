@@ -1,1 +1,218 @@
-= NODE 001
+= Flare Observation Node 001
+:toc:
+:toc-placement!:
+
+toc::[]
+
+== Overview
+
+**Node Type:** Archive Mode (Full Historical Data)
+
+Node-001 is configured as a full archive node, maintaining complete historical blockchain data from genesis. This configuration provides the most comprehensive data access but requires significant disk space.
+
+== Configuration Summary
+
+[cols="2,3,5"]
+|===
+|Parameter |Value |Description
+
+|`pruning-enabled`
+|`false`
+|**No pruning** - Retains all historical state data
+
+|`state-sync-enabled`
+|`false`
+|**Full sync from genesis** - Downloads entire blockchain history
+
+|Transaction History
+|Unlimited
+|All transactions since genesis are indexed and queryable
+
+|Disk Usage
+|High (>2TB expected)
+|Complete blockchain state and history
+
+|Sync Time
+|Slow (1-2 weeks)
+|Must download and process all blocks from genesis
+|===
+
+== Use Cases
+
+✅ **Best for:**
+
+* Blockchain explorers requiring complete history
+* Historical data analysis and research
+* Compliance and audit requirements
+* Serving as a backup/reference node
+* Applications needing to query any historical block
+
+❌ **Not ideal for:**
+
+* Quick deployment scenarios
+* Disk space-constrained environments
+* FSP indexing (only needs 42 days - see node-004)
+
+== Key Configuration Parameters
+
+From `node/configs/flare/C/config.json`:
+
+[source,json]
+----
+{
+  "pruning-enabled": false,
+  "state-sync-enabled": false,
+  "eth-apis": ["eth", "eth-filter", "net", "web3", "internal-*"],
+  "rpc-gas-cap": 50000000,
+  "rpc-tx-fee-cap": 100,
+  "log-level": "info"
+}
+----
+
+=== Security Features
+
+* `snowman-api-enabled: false` - Consensus API disabled
+* `coreth-admin-api-enabled: false` - Admin API disabled for security
+* `allow-unprotected-txs: false` - Prevents EIP-155 bypass
+* `allow-unfinalized-queries: false` - Only finalized data served
+
+== Network Configuration
+
+From `.env`:
+
+* **HTTP API Port:** 9650 (default)
+* **Staking Port:** 9651 (default)
+* **Container Name:** `ftso-flare-observation-node-001`
+* **Data Volume:** `/var/lib/flare/volumes/flare-ftso-observation-node-001-data/`
+* **Logs Volume:** `/var/lib/flare/volumes/flare-ftso-observation-node-001-logs/`
+
+== Quick Start
+
+[source,bash]
+----
+cd network/flare/observation-nodes/node-001
+
+# 1. Create .env from example (if not exists)
+cp .env.example .env
+
+# 2. Create volume directories
+make init-volumes
+
+# 3. Configure staking certificates
+# Copy staker.crt and staker.key to node/certs/staking/
+
+# 4. Update NODE_ID in node/node.env
+nano node/node.env
+
+# 5. Start the node
+make up
+
+# 6. Monitor logs
+make logs
+
+# 7. Check status
+make status
+----
+
+== Makefile Commands
+
+The node includes a colorized Makefile for easy management:
+
+[source,bash]
+----
+# Show help and current status
+make help
+
+# Initialize volume directories (auto-creates from .env)
+make init-volumes
+
+# Start the node (requires ENABLED=true)
+make up
+
+# Stop the node
+make down
+
+# Restart the node (requires ENABLED=true)
+make restart
+
+# Follow logs (auto-resets terminal on exit)
+make logs
+
+# Show node status and API info
+make status
+
+# Show running containers
+make ps
+----
+
+=== Colorized Output
+
+All Makefile commands use color-coded output:
+
+* 🟢 **Green** - Success messages, enabled status
+* 🔴 **Red** - Error messages, disabled status
+* 🟡 **Yellow** - Warnings, stop/restart operations
+* 🔵 **Blue** - Info messages, utility commands
+* 🔷 **Cyan** - Headers, logs
+* 🟣 **Magenta** - Status displays
+
+=== Terminal Reset
+
+The `make logs` command automatically runs `stty sane` when you exit (Ctrl+C), preventing terminal corruption from container log output.
+
+=== Multi-Node Orchestration
+
+This node can also be managed via the orchestration Makefile:
+
+[source,bash]
+----
+# From the observation-nodes directory
+cd network/flare/observation-nodes
+
+# Start all enabled nodes (including this one if ENABLED=true)
+make up
+
+# Check status of all nodes
+make status
+
+# See orchestration help
+make help
+----
+
+See `/network/flare/observation-nodes/Makefile` for multi-node management.
+
+== Performance Characteristics
+
+* **Initial Sync:** 1-2 weeks depending on network speed
+* **Ongoing Sync:** Real-time, < 2 seconds per block
+* **Query Performance:** Fast for all historical queries
+* **Resource Usage:** High CPU during sync, high disk I/O and storage
+
+== Comparison with Other Nodes
+
+[cols="1,3"]
+|===
+|Node |Configuration
+
+|**Node-001** (This)
+|**Archive Mode** - Complete history, no pruning, no state-sync
+
+|Node-002
+|State-Sync Mode - Fast sync, 46.7 days retention, no pruning
+
+|Node-003
+|Pruning Mode - Full sync, 67.5 days transaction history, pruning enabled
+
+|Node-004
+|**FSP Optimized** - State-sync + pruning, 43.75 days retention (recommended for FSP indexing)
+|===
+
+== Maintenance
+
+* **Disk Space Monitoring:** Regularly check available disk space
+* **Backup:** Consider periodic backups of the data volume
+* **Updates:** Follow Flare Foundation release notes for go-flare updates
+
+== Support
+
+For issues or questions, see the main repository documentation at `/CLAUDE.md`.

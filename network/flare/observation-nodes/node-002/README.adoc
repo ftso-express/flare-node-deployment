@@ -1,0 +1,303 @@
+= Flare Observation Node 002
+:toc:
+:toc-placement!:
+
+toc::[]
+
+== Overview
+
+**Node Type:** State-Sync Mode with Historical Window
+
+Node-002 is configured for fast initial synchronization using state-sync while maintaining a 46.7-day historical data window. This configuration balances quick deployment with moderate historical data availability.
+
+== Configuration Summary
+
+[cols="2,3,5"]
+|===
+|Parameter |Value |Description
+
+|`state-sync-enabled`
+|`true`
+|**Fast sync** - Bootstraps from recent network snapshot
+
+|`state-sync-min-blocks`
+|`2,240,000`
+|**46.7 days** of historical blocks retained (at 1.8s/block)
+
+|`pruning-enabled`
+|`false`
+|**No pruning** - Complete state within retention window
+
+|Transaction History
+|46.7 days
+|All transactions within the retention window are queryable
+
+|Disk Usage
+|Moderate (~500GB-1TB)
+|State data for 46.7-day window
+
+|Sync Time
+|Fast (hours to 1-2 days)
+|Downloads recent state snapshot, then syncs forward
+|===
+
+== Use Cases
+
+✅ **Best for:**
+
+* Quick deployment when historical data beyond ~47 days is not needed
+* Development and testing environments
+* Applications with moderate historical data requirements
+* Secondary/backup nodes that need to catch up quickly
+* Historical analysis within the 46.7-day window
+
+❌ **Not ideal for:**
+
+* Complete historical blockchain analysis (use node-001)
+* FSP indexing requiring exactly 42 days (use node-004 - optimized config)
+* Disk space-critical environments (use node-004 with pruning)
+
+== Key Configuration Parameters
+
+From `node/configs/flare/C/config.json`:
+
+[source,json]
+----
+{
+  "state-sync-enabled": true,
+  "state-sync-min-blocks": 2240000,
+  "pruning-enabled": false,
+  "eth-apis": ["eth", "eth-filter", "net", "web3", "internal-*"],
+  "rpc-gas-cap": 50000000,
+  "rpc-tx-fee-cap": 100,
+  "log-level": "info"
+}
+----
+
+=== State-Sync Behavior
+
+* **Initial Bootstrap:** Downloads chain state from peers at a recent block (~47 days from tip)
+* **Historical Limit:** Blocks older than ~47 days from current tip are not available
+* **Query Behavior:** Queries for blocks older than the sync point will fail with "missing trie node" or similar errors
+* **Forward Sync:** After state-sync completes, syncs normally to chain tip
+
+=== Security Features
+
+* `snowman-api-enabled: false` - Consensus API disabled
+* `coreth-admin-api-enabled: false` - Admin API disabled for security
+* `allow-unprotected-txs: false` - Prevents EIP-155 bypass
+* `allow-unfinalized-queries: false` - Only finalized data served
+
+== Network Configuration
+
+From `.env.example`:
+
+* **HTTP API Port:** 9650 (configurable)
+* **Staking Port:** 9651 (configurable)
+* **Container Name:** `ftso-flare-observation-node-002`
+* **Data Volume:** `/var/lib/flare/volumes/flare-ftso-observation-node-002-data/`
+* **Logs Volume:** `/var/lib/flare/volumes/flare-ftso-observation-node-002-logs/`
+
+**Note:** Create `.env` from `.env.example` and configure unique ports if running multiple nodes.
+
+== Quick Start
+
+[source,bash]
+----
+cd network/flare/observation-nodes/node-002
+
+# 1. Create .env from example
+cp .env.example .env
+
+# 2. Update ports if needed (avoid conflicts with node-001)
+# Edit X_PORT_HTTP_PUBLISHED and X_PORT_STAKING_PUBLISHED in .env
+
+# 3. Create volume directories
+make init-volumes
+
+# 4. Configure staking certificates
+# Copy staker.crt and staker.key to node/certs/staking/
+
+# 5. Create node.env from example
+cp node/node.env.example node/node.env
+
+# 6. Update NODE_ID in node/node.env
+nano node/node.env
+
+# 7. Start the node
+make up
+
+# 8. Monitor logs
+make logs
+
+# 9. Check status
+make status
+----
+
+== Makefile Commands
+
+The node includes a colorized Makefile for easy management:
+
+[source,bash]
+----
+# Show help and current status
+make help
+
+# Initialize volume directories (auto-creates from .env)
+make init-volumes
+
+# Start the node (requires ENABLED=true)
+make up
+
+# Stop the node
+make down
+
+# Restart the node (requires ENABLED=true)
+make restart
+
+# Follow logs (auto-resets terminal on exit)
+make logs
+
+# Show node status and API info
+make status
+
+# Show running containers
+make ps
+----
+
+=== Colorized Output
+
+All Makefile commands use color-coded output:
+
+* 🟢 **Green** - Success messages, enabled status
+* 🔴 **Red** - Error messages, disabled status
+* 🟡 **Yellow** - Warnings, stop/restart operations
+* 🔵 **Blue** - Info messages, utility commands
+* 🔷 **Cyan** - Headers, logs
+* 🟣 **Magenta** - Status displays
+
+=== Terminal Reset
+
+The `make logs` command automatically runs `stty sane` when you exit (Ctrl+C), preventing terminal corruption from container log output.
+
+=== Multi-Node Orchestration
+
+This node can also be managed via the orchestration Makefile:
+
+[source,bash]
+----
+# From the observation-nodes directory
+cd network/flare/observation-nodes
+
+# Start all enabled nodes (including this one if ENABLED=true)
+make up
+
+# Check status of all nodes
+make status
+
+# See orchestration help
+make help
+----
+
+See `/network/flare/observation-nodes/Makefile` for multi-node management.
+
+== Performance Characteristics
+
+* **Initial Sync:** Hours to 1-2 days (much faster than archive mode)
+* **State-Sync Phase:** Downloads recent state snapshot
+* **Forward Sync Phase:** Syncs from snapshot point to chain tip
+* **Ongoing Sync:** Real-time, < 2 seconds per block
+* **Query Performance:** Fast for blocks within 46.7-day window
+* **Resource Usage:** Moderate CPU/disk during sync, lower storage than archive
+
+== Data Retention Window
+
+[source]
+----
+Block Time: ~1.8 seconds
+Retention: 2,240,000 blocks
+Time Window: 2,240,000 × 1.8s ÷ 86,400s/day = 46.7 days
+
+Example:
+  Current Block: 10,000,000
+  Available From: Block 7,760,000 (~46.7 days ago)
+  Blocks 0 - 7,759,999: NOT AVAILABLE (never downloaded)
+----
+
+== Comparison with Other Nodes
+
+[cols="1,3"]
+|===
+|Node |Configuration
+
+|Node-001
+|Archive Mode - Complete history, no pruning, no state-sync
+
+|**Node-002** (This)
+|**State-Sync Mode** - Fast sync, 46.7 days retention, no pruning
+
+|Node-003
+|Pruning Mode - Full sync, 67.5 days transaction history, pruning enabled
+
+|Node-004
+|**FSP Optimized** - State-sync + pruning, 43.75 days retention (recommended for FSP indexing)
+|===
+
+== Known Limitations
+
+* **Historical Gap:** Blocks older than 46.7 days from current tip are not available
+* **GetTimestamp Errors:** Queries for old blocks will fail if they're before the state-sync point
+* **No Archive Queries:** Cannot serve as a complete historical data source
+
+== When to Use Node-002 vs Node-004
+
+[cols="2,3,3"]
+|===
+|Consideration |Node-002 (This) |Node-004
+
+|**Retention Period**
+|46.7 days
+|43.75 days (optimized for 42-day FSP requirement)
+
+|**Pruning**
+|Disabled (higher disk usage)
+|Enabled (lower disk usage)
+
+|**Use Case**
+|General purpose, fast sync
+|**FSP indexing specifically**
+
+|**Disk Space**
+|Higher (~500GB-1TB)
+|Lower (~300-500GB)
+
+|**Config Completeness**
+|Missing `allow-missing-tries`
+|Includes all required parameters
+|===
+
+**Recommendation:** For FSP indexing, use **node-004** - it's specifically optimized for 42-day retention with pruning enabled and proper `allow-missing-tries` configuration.
+
+== Maintenance
+
+* **Monitor Retention:** Ensure queries stay within 46.7-day window
+* **Disk Space:** Check available space periodically
+* **Updates:** Follow Flare Foundation release notes for go-flare updates
+* **State-Sync Point:** The sync point moves forward as the chain grows (always ~47 days from tip)
+
+== Troubleshooting
+
+**"Missing trie node" errors:**
+
+* You're querying blocks older than the state-sync point
+* Solution: Only query blocks within the 46.7-day retention window
+
+**Slow initial sync:**
+
+* State-sync requires finding peers with state snapshot
+* Check network connectivity and bootstrap configuration
+* Monitor logs for state-sync progress messages
+
+== Support
+
+For issues or questions, see the main repository documentation at `/CLAUDE.md`.

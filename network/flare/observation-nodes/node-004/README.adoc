@@ -1,0 +1,536 @@
+= Flare Observation Node 004
+:toc:
+:toc-placement!:
+
+toc::[]
+
+== Overview
+
+**Node Type:** FSP-Optimized (State-Sync + Pruning, 42-Day Retention)
+
+⚠️ **NOT RECOMMENDED FOR IMMEDIATE FSP INDEXING** - Use node-003 instead
+
+Node-004 combines state-sync initialization with pruning-enabled disk efficiency for **long-term** FSP operations. However, it requires 44 days of continuous running to accumulate the necessary 43.75 days of historical data.
+
+**For immediate FSP indexing, use node-003** (full sync with pruning, ~1 week setup, complete historical data).
+
+== Configuration Summary
+
+[cols="2,3,5"]
+|===
+|Parameter |Value |Description
+
+|`state-sync-enabled`
+|`true`
+|**Fast sync** - Bootstraps from recent network snapshot
+
+|`state-sync-min-blocks`
+|`2,100,000`
+|**43.75 days** of historical blocks retained (at 1.8s/block)
+
+|`pruning-enabled`
+|`true`
+|**Pruning enabled** - Saves disk space by removing old state
+
+|`allow-missing-tries`
+|`true`
+|**Required** - Allows pruning without archival mode errors
+
+|`tx-lookup-limit`
+|`2,100,000`
+|Transaction indices for 43.75 days (matches retention)
+
+|Transaction History
+|43.75 days (42+ days)
+|Exceeds FSP 42-day requirement with buffer
+
+|Disk Usage
+|Low (~300-500GB)
+|Optimal disk efficiency with pruning
+
+|Sync Time
+|Fast (hours to 1-2 days)
+|State-sync provides rapid deployment
+|===
+
+== Why Node-004 vs Node-003 for FSP Indexing?
+
+**⚠️ For IMMEDIATE FSP indexing, use node-003!**
+
+Node-004 is optimized for **long-term** FSP operations after initial setup:
+
+✅ **Node-004 advantages (after 44-day accumulation):**
+
+* **43.75-day retention** (2,100,000 blocks) - Exceeds 42-day requirement with safety margin
+* **Disk efficient** - Pruning keeps storage costs low (~300-500GB)
+* **Production-ready** - All required parameters configured correctly
+* **Lower ongoing disk usage** than node-003
+
+❌ **Node-004 limitations:**
+
+* **44-day wait** - Must run for 44 days to accumulate enough blocks
+* **State-sync does NOT backfill** - Accumulates blocks forward only
+* **Not suitable for immediate FSP indexing**
+
+✅ **Node-003 advantages for FSP:**
+
+* **~1 week full sync** - Much faster than 44-day accumulation
+* **Complete historical data** - 67.5 days transaction history
+* **Ready for FSP immediately** after sync completes
+* **Recommended for new FSP deployments**
+
+**Recommendation:** Use **node-003** for FSP indexing unless you already have a long-running node-004.
+
+== Use Cases
+
+✅ **Best for:**
+
+* **Long-term FSP indexing** - After 44 days of running, provides ongoing 42-day retention
+* Applications that can wait 44 days for initial setup
+* Long-running production nodes with moderate historical needs
+* Disk space-constrained environments
+* Scenarios prioritizing low disk usage over immediate availability
+
+⚠️ **Important Timeline:** Node must run for 44 days before it has enough data for FSP indexing!
+
+❌ **Not ideal for:**
+
+* **Immediate FSP indexing** - Use node-003 instead (full sync, ~1 week setup)
+* Complete historical blockchain analysis (use node-001)
+* Transaction lookups beyond 43.75 days
+* Applications needing historical data right away
+
+== Key Configuration Parameters
+
+From `node/configs/flare/C/config.json`:
+
+[source,json]
+----
+{
+  "snowman-api-enabled": false,
+  "coreth-admin-api-enabled": false,
+  "eth-apis": [
+    "eth",
+    "eth-filter",
+    "net",
+    "web3",
+    "internal-eth",
+    "internal-blockchain",
+    "internal-transaction"
+  ],
+  "rpc-gas-cap": 50000000,
+  "rpc-tx-fee-cap": 100,
+  "pruning-enabled": true,
+  "allow-missing-tries": true,
+  "tx-lookup-limit": 2100000,
+  "state-sync-enabled": true,
+  "state-sync-min-blocks": 2100000,
+  "local-txs-enabled": false,
+  "api-max-duration": 0,
+  "api-max-blocks-per-request": 0,
+  "allow-unfinalized-queries": false,
+  "allow-unprotected-txs": false,
+  "log-level": "info"
+}
+----
+
+=== Critical Parameters Explained
+
+**`state-sync-min-blocks: 2100000`**
+
+* Ensures node retains at least 2,100,000 blocks during state-sync
+* At 1.8s/block: 2,100,000 × 1.8 ÷ 86,400 = 43.75 days
+* **Prevents "gettimestamp" errors** for FSP 42-day queries
+* Default (300,000) would only give 6.25 days - insufficient for FSP
+
+**`allow-missing-tries: true`**
+
+* **MANDATORY** when `pruning-enabled: true`
+* Without this, node would error on startup trying to access pruned state
+* Explicitly allows operation without full archival state
+* See: https://build.avax.network/docs/nodes/chain-configs/c-chain
+
+**`tx-lookup-limit: 2100000`**
+
+* Maintains transaction index for 2,100,000 blocks (43.75 days)
+* Matches `state-sync-min-blocks` for consistency
+* Allows transaction lookups by hash within the retention window
+
+=== State-Sync + Pruning Behavior
+
+**CRITICAL: State-sync accumulates blocks FORWARD over time, not backward!**
+
+State-sync does NOT backfill historical data. The `state-sync-min-blocks: 2100000` parameter tells the node to KEEP 2.1M blocks once accumulated, but the node must run for 43.75 days to collect them going forward.
+
+**Initial Sync (State-Sync Phase):**
+
+1. Connects to network and finds peers with state snapshots
+2. Downloads state at a recent block (typically within last ~256 blocks)
+3. Skips processing blocks before the sync point (fast!)
+4. Syncs forward from snapshot to current tip
+5. **Node starts with minimal blocks (~few hours of data)**
+
+**Ongoing Operation (Accumulation Phase):**
+
+* New blocks are processed normally and accumulated
+* After 43.75 days of running, node will have 2.1M blocks
+* Once retention limit reached, old state is pruned automatically
+* Transaction indices maintained for the retention window
+* Disk usage remains stable (~300-500GB) after reaching limit
+
+**Timeline to Full Retention:**
+
+* Day 1: Node has ~few hours of blocks
+* Day 7: Node has ~1 week of blocks
+* Day 30: Node has ~30 days of blocks
+* **Day 44: Node has full 43.75 days (2.1M blocks)** ← FSP ready!
+
+**What You Get:**
+
+* ✅ Blocks within 43.75-day window: **Full access**
+* ✅ Transactions within window: **Fully indexed**
+* ✅ State queries within window: **Available**
+* ❌ Blocks older than sync point: **Headers only, no state**
+
+=== Security Features
+
+* `snowman-api-enabled: false` - Consensus API disabled
+* `coreth-admin-api-enabled: false` - Admin API disabled for security
+* `allow-unprotected-txs: false` - Prevents EIP-155 bypass
+* `allow-unfinalized-queries: false` - Only finalized data served
+* `remote-tx-gossip-only-enabled: false` - Standard gossip behavior
+
+== Network Configuration
+
+From `.env`:
+
+* **HTTP API Port:** 9652 (unique to avoid conflicts)
+* **Staking Port:** 9653 (unique to avoid conflicts)
+* **Container Name:** `ftso-flare-observation-node-004`
+* **Data Volume:** `/var/lib/flare/volumes/flare-ftso-observation-node-004-data/`
+* **Logs Volume:** `/var/lib/flare/volumes/flare-ftso-observation-node-004-logs/`
+* **Node ID:** `NodeID-LJJSCVpRLhTeVzYLxiHCnyFbhy3Ktpm6o`
+
+== Quick Start
+
+[source,bash]
+----
+cd network/flare/observation-nodes/node-004
+
+# 1. Verify .env exists (already created)
+cat .env | grep ENABLED
+# Should show: ENABLED=true
+
+# 2. Create volume directories
+make init-volumes
+
+# 3. Configure staking certificates
+# Copy staker.crt and staker.key to node/certs/staking/
+# cp /path/to/staker.crt node/certs/staking/
+# cp /path/to/staker.key node/certs/staking/
+
+# 4. Verify NODE_ID in node/node.env (already configured)
+grep NODE_ID node/node.env
+# Should show: NODE_ID=NodeID-LJJSCVpRLhTeVzYLxiHCnyFbhy3Ktpm6o
+
+# 5. Start the node
+make up
+
+# 6. Monitor logs and watch for state-sync progress
+make logs
+
+# 7. Check status (wait for full sync)
+make status
+
+# 8. Test API (after sync completes)
+curl -X POST --data '{"jsonrpc":"2.0","id":1,"method":"info.getNodeID"}' \
+  -H 'content-type:application/json;' http://localhost:9652/ext/info
+----
+
+== Makefile Commands
+
+The node includes a colorized Makefile for easy management:
+
+[source,bash]
+----
+# Show help and current status
+make help
+
+# Initialize volume directories (auto-creates from .env)
+make init-volumes
+
+# Start the node (requires ENABLED=true)
+make up
+
+# Stop the node
+make down
+
+# Restart the node (requires ENABLED=true)
+make restart
+
+# Follow logs (auto-resets terminal on exit)
+make logs
+
+# Show node status and API info
+make status
+
+# Show running containers
+make ps
+----
+
+=== Colorized Output
+
+All Makefile commands use color-coded output:
+
+* 🟢 **Green** - Success messages, enabled status
+* 🔴 **Red** - Error messages, disabled status
+* 🟡 **Yellow** - Warnings, stop/restart operations
+* 🔵 **Blue** - Info messages, utility commands
+* 🔷 **Cyan** - Headers, logs
+* 🟣 **Magenta** - Status displays
+
+=== Terminal Reset
+
+The `make logs` command automatically runs `stty sane` when you exit (Ctrl+C), preventing terminal corruption from container log output.
+
+=== Multi-Node Orchestration
+
+This node can also be managed via the orchestration Makefile:
+
+[source,bash]
+----
+# From the observation-nodes directory
+cd network/flare/observation-nodes
+
+# Start all enabled nodes (including this one if ENABLED=true)
+make up
+
+# Check status of all nodes
+make status
+
+# See orchestration help
+make help
+----
+
+See `/network/flare/observation-nodes/Makefile` for multi-node management.
+
+== Performance Characteristics
+
+* **Initial Sync:** Hours to 1-2 days
+  - State-sync phase: 2-8 hours (downloads snapshot)
+  - Forward sync phase: 4-16 hours (syncs to tip)
+  - Much faster than full sync (1-2 weeks)
+
+* **Ongoing Sync:** Real-time, < 2 seconds per block
+
+* **Query Performance:**
+  - Blocks within 43.75 days: ✅ Fast
+  - Transactions within 43.75 days: ✅ Fast (indexed)
+  - State queries within 43.75 days: ✅ Fast
+  - Queries beyond window: ❌ Fail (not available)
+
+* **Resource Usage:**
+  - CPU: Moderate during sync, low during normal operation
+  - RAM: ~8-16GB recommended
+  - Disk I/O: Moderate
+  - Disk Space: ~300-500GB (stable with pruning)
+
+== Data Retention Window
+
+[source]
+----
+Block Time: ~1.8 seconds
+Retention: 2,100,000 blocks
+Time Window: 2,100,000 × 1.8s ÷ 86,400s/day = 43.75 days
+
+FSP Requirement: 42 days
+Safety Buffer: 1.75 days (4.2% margin)
+
+Example Timeline:
+  Current Block: 10,000,000
+  Current Time:  2025-01-23
+
+  Available From: Block 7,900,000 (43.75 days ago)
+  Available To:   Block 10,000,000 (now)
+
+  FSP Queries:    ✅ All blocks from last 42 days covered
+  Margin:         ✅ Additional 1.75 days buffer
+
+  Beyond Window:  Block 7,899,999 and older NOT AVAILABLE
+----
+
+== Comparison with Other Nodes
+
+[cols="1,3"]
+|===
+|Node |Configuration
+
+|Node-001
+|Archive Mode - Complete history, no pruning, no state-sync
+
+|Node-002
+|State-Sync Mode - 46.7 days, no pruning (higher disk usage)
+
+|Node-003
+|Pruning Mode - 67.5 days transaction index, slow sync
+
+|**Node-004** (This) ⭐
+|**FSP Optimized** - State-sync + pruning, 43.75 days, **RECOMMENDED**
+|===
+
+=== Node-004 vs Other Configurations
+
+[cols="2,2,2,2"]
+|===
+|Feature |Node-002 |Node-003 |**Node-004** ⭐
+
+|**Retention**
+|46.7 days
+|67.5 days (tx only)
+|**43.75 days (full)**
+
+|**Sync Time**
+|Fast (hours)
+|Slow (1-2 weeks)
+|**Fast (hours)**
+
+|**Pruning**
+|❌ No
+|✅ Yes
+|**✅ Yes**
+
+|**State-Sync**
+|✅ Yes
+|❌ No
+|**✅ Yes**
+
+|**Disk Usage**
+|~500GB-1TB
+|~400-700GB
+|**~300-500GB**
+
+|**Config Complete**
+|Missing `allow-missing-tries`
+|Missing `allow-missing-tries`
+|**✅ All parameters**
+
+|**FSP Ready**
+|⚠️ Works but inefficient
+|⚠️ Slow to deploy
+|**✅ Optimized**
+|===
+
+== FSP Indexing Integration
+
+This node is ready for FSP indexer integration:
+
+[source,bash]
+----
+# FSP Indexer typically queries via HTTP RPC
+FSP_RPC_URL=http://localhost:9652/ext/bc/C/rpc
+
+# Verify 42-day data availability
+# Query a block from 42 days ago
+BLOCK_NUMBER=$(( $(curl -s -X POST --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
+  $FSP_RPC_URL | jq -r '.result') - 2016000 ))
+
+curl -X POST --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getBlockByNumber\",\"params\":[\"0x$(printf '%x' $BLOCK_NUMBER)\",false],\"id\":1}" \
+  $FSP_RPC_URL | jq .
+----
+
+**Expected Result:** Block data returns successfully (no "missing trie" errors)
+
+== Maintenance
+
+**Disk Space Monitoring:**
+```bash
+# Check data volume usage
+du -sh /var/lib/flare/volumes/flare-ftso-observation-node-004-data/
+
+# Should stabilize around 300-500GB after pruning kicks in
+```
+
+**Retention Window Verification:**
+```bash
+# Verify oldest available block (should be ~43.75 days old)
+make status
+
+# Check block timestamp
+curl -X POST --data '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["latest",false],"id":1}' \
+  -H 'content-type:application/json;' http://localhost:9652/ext/bc/C/rpc
+```
+
+**Updates:**
+* Follow Flare Foundation release notes for go-flare updates
+* Check compatibility before upgrading
+* Backup volume before major version updates
+
+== Troubleshooting
+
+**"Missing trie node" errors for recent blocks:**
+
+* Node may still be syncing - wait for full sync completion
+* Check sync status: `make status`
+* Monitor logs: `make logs`
+
+**State-sync taking too long:**
+
+* Check network connectivity
+* Verify bootstrap endpoints in `node/node.env`
+* Ensure sufficient peers are available
+
+**Queries failing for blocks within 42 days:**
+
+* Verify node is fully synced: `make status`
+* Check block is actually within retention window
+* Confirm `state-sync-min-blocks: 2100000` in config
+
+**Disk usage growing beyond 500GB:**
+
+* Pruning may not have triggered yet (needs time)
+* Check if `pruning-enabled: true` in config
+* Verify `allow-missing-tries: true` is set
+
+**Terminal corrupted after `make logs`:**
+
+* Automatically fixed by Makefile `trap 'stty sane'`
+* If using direct docker compose: Run `stty sane` or `reset`
+
+== Known Limitations
+
+* **⚠️ REQUIRES 43.75 DAYS TO REACH FULL RETENTION** - Node accumulates blocks going forward from start date. NOT suitable for immediate FSP indexing of historical data.
+* **43.75-day maximum lookback** - Queries beyond this fail
+* **No historical state before sync point** - Cannot query account balances from >43.75 days ago
+* **State-sync does NOT backfill** - Only accumulates blocks from start time forward
+* **Transaction lookups limited** - Only 43.75 days of tx indices (once accumulated)
+
+**For immediate FSP indexing, use node-003 instead** (full sync with pruning, ~1 week setup, complete historical data).
+
+These are **intentional trade-offs** for:
+* ✅ Fast initial deployment (hours vs weeks)
+* ✅ Low disk usage (300-500GB vs 2TB+)
+* ✅ FSP 42-day requirement satisfaction (after 44 days of running)
+
+== Deployment Checklist
+
+* [x] C-Chain config optimized (`state-sync-min-blocks: 2100000`)
+* [x] Pruning enabled with `allow-missing-tries: true`
+* [x] `.env` file created with unique ports (9652/9653)
+* [x] Volume paths configured
+* [x] Makefile with `init-volumes` and terminal reset
+* [ ] Update staking certificates in `node/certs/staking/`
+* [ ] Run `make init-volumes` to create directories
+* [ ] Start node with `make up`
+* [ ] Monitor sync progress with `make logs`
+* [ ] Verify 42-day data availability after sync
+
+== Support
+
+For issues or questions, see the main repository documentation at `/CLAUDE.md`.
+
+== References
+
+* CLAUDE.md: Complete configuration documentation and state-sync research
+* Avalanche C-Chain Docs: https://build.avax.network/docs/nodes/chain-configs/c-chain
+* Flare Network Overview: https://dev.flare.network/network/overview/
+* FSP Documentation: Check Flare Foundation resources

@@ -1,1 +1,394 @@
-= NODE 003
+= Flare Observation Node 003
+:toc:
+:toc-placement!:
+
+toc::[]
+
+== Overview
+
+**Node Type:** Pruning Mode with Transaction Indexing
+
+Node-003 is configured for disk-efficient operation using pruning while maintaining a 67.5-day transaction history index. This configuration balances disk space savings with extended transaction lookup capabilities.
+
+== Configuration Summary
+
+[cols="2,3,5"]
+|===
+|Parameter |Value |Description
+
+|`pruning-enabled`
+|`true`
+|**Pruning enabled** - Old state data is removed to save disk space
+
+|`tx-lookup-limit`
+|`3,240,000`
+|**67.5 days** of transaction indices retained (at 1.8s/block)
+
+|`state-sync-enabled`
+|`false`
+|**Full sync from genesis** - Downloads and processes entire blockchain
+
+|Transaction History
+|67.5 days
+|Transaction lookups available for ~67.5 days
+
+|Disk Usage
+|Moderate (~400-700GB)
+|Pruned state + 67.5-day transaction index
+
+|Sync Time
+|Slow (1-2 weeks)
+|Must download and process all blocks from genesis
+|===
+
+== Use Cases
+
+✅ **Best for:**
+
+* Long-term transaction history lookups (67+ days)
+* Disk space-constrained environments requiring extensive history
+* Applications needing transaction data but not full state history
+* Balance between archive mode and state-sync approaches
+* Historical transaction analysis and compliance
+
+❌ **Not ideal for:**
+
+* Full state queries on old blocks (state is pruned)
+* Quick deployment (use node-002 or node-004)
+* Complete historical state queries (use node-001)
+
+== Key Configuration Parameters
+
+From `node/configs/flare/C/config.json`:
+
+[source,json]
+----
+{
+  "pruning-enabled": true,
+  "tx-lookup-limit": 3240000,
+  "state-sync-enabled": false,
+  "eth-apis": ["eth", "eth-filter", "net", "web3", "internal-*"],
+  "rpc-gas-cap": 50000000,
+  "rpc-tx-fee-cap": 100,
+  "log-level": "info"
+}
+----
+
+=== Pruning Behavior
+
+**What is Pruned:**
+* Historical state tries (Merkle tree nodes for old blocks)
+* Account states from blocks older than recent history
+* Contract storage snapshots from old blocks
+
+**What is NOT Pruned:**
+* Block headers and bodies (always available)
+* Transaction data within `tx-lookup-limit` window
+* Recent state (kept in memory/cache for performance)
+* Receipt data for indexed transactions
+
+**Important:** Missing `allow-missing-tries: true` parameter. This may cause warnings but should still function.
+
+=== Transaction Lookup
+
+* **Indexed Period:** 3,240,000 blocks (~67.5 days)
+* **Lookup Methods:** `eth_getTransactionByHash`, `eth_getTransactionReceipt`
+* **Beyond Limit:** Transactions older than 67.5 days cannot be looked up by hash
+* **Block Queries:** Blocks are always available, but state queries on old blocks will fail
+
+=== Security Features
+
+* `snowman-api-enabled: false` - Consensus API disabled
+* `coreth-admin-api-enabled: false` - Admin API disabled for security
+* `allow-unprotected-txs: false` - Prevents EIP-155 bypass
+* `allow-unfinalized-queries: false` - Only finalized data served
+
+== Network Configuration
+
+From `.env.example`:
+
+* **HTTP API Port:** 9650 (configurable)
+* **Staking Port:** 9651 (configurable)
+* **Container Name:** `ftso-flare-observation-node-003`
+* **Data Volume:** `/var/lib/flare/volumes/flare-ftso-observation-node-003-data/`
+* **Logs Volume:** `/var/lib/flare/volumes/flare-ftso-observation-node-003-logs/`
+
+**Note:** Create `.env` from `.env.example` and configure unique ports if running multiple nodes.
+
+== Quick Start
+
+[source,bash]
+----
+cd network/flare/observation-nodes/node-003
+
+# 1. Create .env from example
+cp .env.example .env
+
+# 2. Update ports if needed (avoid conflicts with other nodes)
+# Edit X_PORT_HTTP_PUBLISHED and X_PORT_STAKING_PUBLISHED in .env
+
+# 3. Create volume directories
+make init-volumes
+
+# 4. Configure staking certificates
+# Copy staker.crt and staker.key to node/certs/staking/
+
+# 5. Create node.env from example
+cp node/node.env.example node/node.env
+
+# 6. Update NODE_ID in node/node.env
+nano node/node.env
+
+# 7. Start the node
+make up
+
+# 8. Monitor logs (expect warnings about missing tries - normal with pruning)
+make logs
+
+# 9. Check status
+make status
+----
+
+== Makefile Commands
+
+The node includes a colorized Makefile for easy management:
+
+[source,bash]
+----
+# Show help and current status
+make help
+
+# Initialize volume directories (auto-creates from .env)
+make init-volumes
+
+# Start the node (requires ENABLED=true)
+make up
+
+# Stop the node
+make down
+
+# Restart the node (requires ENABLED=true)
+make restart
+
+# Follow logs (auto-resets terminal on exit)
+make logs
+
+# Show node status and API info
+make status
+
+# Show running containers
+make ps
+----
+
+=== Colorized Output
+
+All Makefile commands use color-coded output:
+
+* 🟢 **Green** - Success messages, enabled status
+* 🔴 **Red** - Error messages, disabled status
+* 🟡 **Yellow** - Warnings, stop/restart operations
+* 🔵 **Blue** - Info messages, utility commands
+* 🔷 **Cyan** - Headers, logs
+* 🟣 **Magenta** - Status displays
+
+=== Terminal Reset
+
+The `make logs` command automatically runs `stty sane` when you exit (Ctrl+C), preventing terminal corruption from container log output.
+
+=== Multi-Node Orchestration
+
+This node can also be managed via the orchestration Makefile:
+
+[source,bash]
+----
+# From the observation-nodes directory
+cd network/flare/observation-nodes
+
+# Start all enabled nodes (including this one if ENABLED=true)
+make up
+
+# Check status of all nodes
+make status
+
+# See orchestration help
+make help
+----
+
+See `/network/flare/observation-nodes/Makefile` for multi-node management.
+
+== Performance Characteristics
+
+* **Initial Sync:** 1-2 weeks (full sync from genesis)
+* **Ongoing Sync:** Real-time, < 2 seconds per block
+* **Query Performance:**
+  - Transaction lookups: Fast (within 67.5-day window)
+  - State queries: Fast for recent blocks, fail for old pruned blocks
+  - Block queries: Fast for all blocks
+* **Resource Usage:**
+  - High CPU during initial sync
+  - Moderate disk I/O
+  - Lower disk usage than archive mode (~50% savings)
+
+== Data Retention Window
+
+[source]
+----
+Block Time: ~1.8 seconds
+Tx Index Limit: 3,240,000 blocks
+Time Window: 3,240,000 × 1.8s ÷ 86,400s/day = 67.5 days
+
+Example:
+  Current Block: 10,000,000
+  Tx Lookups Available: Blocks 6,760,000 - 10,000,000
+  State Queries: Only recent blocks (older state is pruned)
+  Block Data: All blocks 0 - 10,000,000
+----
+
+== Comparison with Other Nodes
+
+[cols="1,3"]
+|===
+|Node |Configuration
+
+|Node-001
+|Archive Mode - Complete history, no pruning, no state-sync
+
+|Node-002
+|State-Sync Mode - Fast sync, 46.7 days retention, no pruning
+
+|**Node-003** (This)
+|**Pruning Mode** - Full sync, 67.5 days transaction history, pruning enabled
+
+|Node-004
+|**FSP Optimized** - State-sync + pruning, 43.75 days retention (recommended for FSP indexing)
+|===
+
+== Query Capabilities
+
+[cols="2,1,3"]
+|===
+|Query Type |Available? |Notes
+
+|**Block by Number/Hash**
+|✅ Yes
+|All blocks since genesis
+
+|**Transaction by Hash**
+|⚠️ Partial
+|Only within 67.5-day window
+
+|**Account Balance**
+|⚠️ Recent
+|Only for recent blocks (old state pruned)
+
+|**Contract State**
+|⚠️ Recent
+|Only for recent blocks (old state pruned)
+
+|**Event Logs**
+|⚠️ Partial
+|Within transaction index window
+
+|**Block Receipts**
+|⚠️ Partial
+|Within transaction index window
+|===
+
+== Pruning vs Archive Trade-offs
+
+[cols="2,2,2"]
+|===
+|Consideration |Node-003 (Pruning) |Node-001 (Archive)
+
+|**Disk Usage**
+|~400-700GB
+|>2TB
+
+|**Transaction Lookups**
+|67.5 days
+|Unlimited
+
+|**State Queries**
+|Recent only
+|All blocks
+
+|**Sync Time**
+|1-2 weeks
+|1-2 weeks (same)
+
+|**Use Case**
+|Disk-efficient with good tx history
+|Complete historical queries
+|===
+
+== Known Limitations
+
+* **Missing `allow-missing-tries` Parameter:** Config lacks this parameter which is recommended when pruning is enabled
+  - May cause warnings in logs
+  - Should still function correctly
+  - Consider adding to config.json if issues arise
+
+* **Pruned State:** Cannot query account balances or contract state for old blocks
+* **Transaction Lookup Window:** Transactions older than 67.5 days not indexed
+* **State-Dependent Queries:** Historical `eth_call` or balance queries will fail for pruned blocks
+
+== When to Use Node-003 vs Node-004
+
+[cols="2,3,3"]
+|===
+|Consideration |Node-003 (This) |Node-004
+
+|**Retention Period**
+|67.5 days (transaction index)
+|43.75 days (full retention)
+
+|**State-Sync**
+|Disabled (slow initial sync)
+|Enabled (fast initial sync)
+
+|**Use Case**
+|Extended transaction history
+|**FSP indexing (42 days)**
+
+|**Sync Time**
+|1-2 weeks
+|Hours to 1-2 days
+
+|**Config Completeness**
+|Missing `allow-missing-tries`
+|Includes all optimizations
+|===
+
+**Recommendation:**
+* For **FSP indexing**: Use **node-004** (faster sync, optimized config)
+* For **extended transaction history** with disk efficiency: Use **node-003**
+
+== Maintenance
+
+* **Disk Space:** Monitor available space (pruning keeps it under control)
+* **Transaction Window:** Be aware of the 67.5-day lookup limit
+* **Pruning Process:** Automatic, no manual intervention needed
+* **Updates:** Follow Flare Foundation release notes for go-flare updates
+
+== Troubleshooting
+
+**"Missing trie node" errors:**
+
+* Normal with pruning - you're querying pruned state
+* Only recent state is available
+* Transaction lookups still work within 67.5-day window
+
+**Transaction not found (but recent):**
+
+* Check if transaction is within 67.5-day window
+* Verify transaction hash is correct
+* Ensure node is fully synced
+
+**Warnings about missing tries in logs:**
+
+* Expected behavior with pruning enabled
+* Add `"allow-missing-tries": true` to config.json to suppress warnings
+
+== Support
+
+For issues or questions, see the main repository documentation at `/CLAUDE.md`.

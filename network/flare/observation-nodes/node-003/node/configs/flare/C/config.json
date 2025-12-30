@@ -13,6 +13,7 @@
   "rpc-gas-cap": 50000000,
   "rpc-tx-fee-cap": 100,
   "pruning-enabled": true,
+  "allow-missing-tries": true,
   "tx-lookup-limit": 3240000,
   "state-sync-enabled": false,
   "local-txs-enabled": false,

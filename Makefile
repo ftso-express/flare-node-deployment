@@ -10,8 +10,15 @@ COLOR_BLUE    := \033[34m
 COLOR_MAGENTA := \033[35m
 COLOR_CYAN    := \033[36m
 
-# Node directories - auto-discover all node-* directories
-NODE_DIRS := $(sort $(wildcard network/flare/observation-nodes/node-*))
+# Auto-discover all networks and node directories
+NETWORKS := $(sort $(notdir $(wildcard network/*)))
+FLARE_OBS_NODES := $(sort $(wildcard network/flare/observation-nodes/node-*))
+FLARE_VAL_NODES := $(sort $(wildcard network/flare/validation-nodes/node-*))
+SONGBIRD_OBS_NODES := $(sort $(wildcard network/songbird/observation-nodes/node-*))
+COSTON_OBS_NODES := $(sort $(wildcard network/coston/observation-nodes/node-*))
+COSTWO_OBS_NODES := $(sort $(wildcard network/costwo/observation-nodes/node-*))
+# Combined list of all nodes (for compatibility with existing targets)
+NODE_DIRS := $(FLARE_OBS_NODES) $(FLARE_VAL_NODES) $(SONGBIRD_OBS_NODES) $(COSTON_OBS_NODES) $(COSTWO_OBS_NODES)
 
 # Default target
 .DEFAULT_GOAL := help
@@ -88,53 +95,192 @@ docs-clean:
 	@echo -e "$(COLOR_BOLD)$(COLOR_YELLOW)Cleaning documentation output...$(COLOR_RESET)"
 	@$(MAKE) -C docs clean && echo -e "$(COLOR_YELLOW)✓ Documentation cleaned$(COLOR_RESET)"
 
-# Node status - show all nodes
+# Node status - show all nodes grouped by network
 nodes-status:
 	@echo -e "$(COLOR_BOLD)$(COLOR_CYAN)╔════════════════════════════════════════════════════════════╗$(COLOR_RESET)"
-	@echo -e "$(COLOR_BOLD)$(COLOR_CYAN)║                 All Nodes Status                           ║$(COLOR_RESET)"
+	@echo -e "$(COLOR_BOLD)$(COLOR_CYAN)║            Multi-Network Node Status Overview              ║$(COLOR_RESET)"
 	@echo -e "$(COLOR_BOLD)$(COLOR_CYAN)╚════════════════════════════════════════════════════════════╝$(COLOR_RESET)"
 	@echo ""
-	@for node_dir in $(NODE_DIRS); do \
-		node_name=$$(basename $$node_dir); \
-		echo -e "$(COLOR_BOLD)$(COLOR_CYAN)$$node_name:$(COLOR_RESET)"; \
-		if [ -f "$$node_dir/.env" ]; then \
-			enabled=$$(grep '^ENABLED=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
-			network_name=$$(grep '^X_LABELS_NETWORK_NAME=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
-			network_type=$$(grep '^X_LABELS_NETWORK_TYPE=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
-			node_role=$$(grep '^X_LABELS_NODE_ROLE=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
-			subsystem=$$(grep '^X_LABELS_SUB_SYSTEM_NAME=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
-			http_port=$$(grep '^X_PORT_HTTP_PUBLISHED=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
-			\
-			if [ -n "$$network_name" ]; then \
-				echo -e "  $(COLOR_MAGENTA)Network:$(COLOR_RESET)  $$network_name ($$network_type)"; \
-			fi; \
-			if [ -n "$$node_role" ]; then \
-				role_display=$$(echo $$node_role | sed 's/_/ /g'); \
-				echo -e "  $(COLOR_MAGENTA)Role:$(COLOR_RESET)     $$role_display"; \
-			fi; \
-			if [ -n "$$subsystem" ]; then \
-				echo -e "  $(COLOR_MAGENTA)System:$(COLOR_RESET)   $$subsystem"; \
-			fi; \
-			\
-			if [ "$$enabled" = "true" ]; then \
-				echo -e "  $(COLOR_GREEN)Config:$(COLOR_RESET)   $(COLOR_GREEN)✓ Enabled$(COLOR_RESET)"; \
-			else \
-				echo -e "  $(COLOR_RED)Config:$(COLOR_RESET)   $(COLOR_RED)✗ Disabled$(COLOR_RESET)"; \
-			fi; \
-			if cd $$node_dir && docker compose ps 2>/dev/null | grep -q "Up"; then \
-				echo -e "  $(COLOR_GREEN)Runtime:$(COLOR_RESET)  $(COLOR_GREEN)● Running$(COLOR_RESET)"; \
-				if [ -n "$$http_port" ]; then \
-					echo -e "  $(COLOR_CYAN)API:$(COLOR_RESET)      http://localhost:$$http_port"; \
-				fi; \
-			else \
-				echo -e "  $(COLOR_YELLOW)Runtime:$(COLOR_RESET)  $(COLOR_YELLOW)○ Stopped$(COLOR_RESET)"; \
-			fi; \
-			cd - > /dev/null 2>&1; \
-		else \
-			echo -e "  $(COLOR_YELLOW)Config:$(COLOR_RESET)   $(COLOR_YELLOW)⚠ No .env file$(COLOR_RESET)"; \
-		fi; \
+	@total_nodes=0; \
+	total_running=0; \
+	total_enabled=0; \
+	flare_running=0; \
+	flare_total=0; \
+	songbird_running=0; \
+	songbird_total=0; \
+	coston_running=0; \
+	coston_total=0; \
+	costwo_running=0; \
+	costwo_total=0; \
+	\
+	if [ -n "$(FLARE_OBS_NODES)$(FLARE_VAL_NODES)" ]; then \
+		echo -e "$(COLOR_BOLD)$(COLOR_MAGENTA)━━━ FLARE MAINNET ━━━$(COLOR_RESET)"; \
 		echo ""; \
-	done
+		for node_dir in $(FLARE_OBS_NODES) $(FLARE_VAL_NODES); do \
+			node_name=$$(basename $$node_dir); \
+			node_type=$$(echo $$node_dir | grep -q "validation-nodes" && echo "validation" || echo "observation"); \
+			flare_total=$$((flare_total + 1)); \
+			total_nodes=$$((total_nodes + 1)); \
+			echo -e "  $(COLOR_BOLD)$(COLOR_CYAN)$$node_name$(COLOR_RESET) $(COLOR_YELLOW)[$$node_type]$(COLOR_RESET)"; \
+			if [ -f "$$node_dir/.env" ]; then \
+				enabled=$$(grep '^ENABLED=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
+				http_port=$$(grep '^X_PORT_HTTP_PUBLISHED=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
+				if [ "$$enabled" = "true" ]; then \
+					total_enabled=$$((total_enabled + 1)); \
+					echo -e "    $(COLOR_GREEN)Config:$(COLOR_RESET)   $(COLOR_GREEN)✓ Enabled$(COLOR_RESET)"; \
+				else \
+					echo -e "    $(COLOR_RED)Config:$(COLOR_RESET)   $(COLOR_RED)✗ Disabled$(COLOR_RESET)"; \
+				fi; \
+				if cd $$node_dir && docker compose ps 2>/dev/null | grep -q "Up"; then \
+					echo -e "    $(COLOR_GREEN)Runtime:$(COLOR_RESET)  $(COLOR_GREEN)● Running$(COLOR_RESET)"; \
+					flare_running=$$((flare_running + 1)); \
+					total_running=$$((total_running + 1)); \
+					if [ -n "$$http_port" ]; then \
+						echo -e "    $(COLOR_CYAN)API:$(COLOR_RESET)      http://localhost:$$http_port"; \
+					fi; \
+				else \
+					echo -e "    $(COLOR_YELLOW)Runtime:$(COLOR_RESET)  $(COLOR_YELLOW)○ Stopped$(COLOR_RESET)"; \
+				fi; \
+				cd - > /dev/null 2>&1; \
+			else \
+				echo -e "    $(COLOR_YELLOW)Config:$(COLOR_RESET)   $(COLOR_YELLOW)⚠ No .env file$(COLOR_RESET)"; \
+			fi; \
+			echo ""; \
+		done; \
+	fi; \
+	\
+	if [ -n "$(SONGBIRD_OBS_NODES)" ]; then \
+		echo -e "$(COLOR_BOLD)$(COLOR_MAGENTA)━━━ SONGBIRD CANARY NETWORK ━━━$(COLOR_RESET)"; \
+		echo ""; \
+		for node_dir in $(SONGBIRD_OBS_NODES); do \
+			node_name=$$(basename $$node_dir); \
+			songbird_total=$$((songbird_total + 1)); \
+			total_nodes=$$((total_nodes + 1)); \
+			echo -e "  $(COLOR_BOLD)$(COLOR_CYAN)$$node_name$(COLOR_RESET) $(COLOR_YELLOW)[observation]$(COLOR_RESET)"; \
+			if [ -f "$$node_dir/.env" ]; then \
+				enabled=$$(grep '^ENABLED=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
+				http_port=$$(grep '^X_PORT_HTTP_PUBLISHED=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
+				if [ "$$enabled" = "true" ]; then \
+					total_enabled=$$((total_enabled + 1)); \
+					echo -e "    $(COLOR_GREEN)Config:$(COLOR_RESET)   $(COLOR_GREEN)✓ Enabled$(COLOR_RESET)"; \
+				else \
+					echo -e "    $(COLOR_RED)Config:$(COLOR_RESET)   $(COLOR_RED)✗ Disabled$(COLOR_RESET)"; \
+				fi; \
+				if cd $$node_dir && docker compose ps 2>/dev/null | grep -q "Up"; then \
+					echo -e "    $(COLOR_GREEN)Runtime:$(COLOR_RESET)  $(COLOR_GREEN)● Running$(COLOR_RESET)"; \
+					songbird_running=$$((songbird_running + 1)); \
+					total_running=$$((total_running + 1)); \
+					if [ -n "$$http_port" ]; then \
+						echo -e "    $(COLOR_CYAN)API:$(COLOR_RESET)      http://localhost:$$http_port"; \
+					fi; \
+				else \
+					echo -e "    $(COLOR_YELLOW)Runtime:$(COLOR_RESET)  $(COLOR_YELLOW)○ Stopped$(COLOR_RESET)"; \
+				fi; \
+				cd - > /dev/null 2>&1; \
+			else \
+				echo -e "    $(COLOR_YELLOW)Config:$(COLOR_RESET)   $(COLOR_YELLOW)⚠ No .env file$(COLOR_RESET)"; \
+			fi; \
+			echo ""; \
+		done; \
+	fi; \
+	\
+	if [ -n "$(COSTON_OBS_NODES)" ]; then \
+		echo -e "$(COLOR_BOLD)$(COLOR_MAGENTA)━━━ COSTON TESTNET ━━━$(COLOR_RESET)"; \
+		echo ""; \
+		for node_dir in $(COSTON_OBS_NODES); do \
+			node_name=$$(basename $$node_dir); \
+			coston_total=$$((coston_total + 1)); \
+			total_nodes=$$((total_nodes + 1)); \
+			echo -e "  $(COLOR_BOLD)$(COLOR_CYAN)$$node_name$(COLOR_RESET) $(COLOR_YELLOW)[observation]$(COLOR_RESET)"; \
+			if [ -f "$$node_dir/.env" ]; then \
+				enabled=$$(grep '^ENABLED=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
+				http_port=$$(grep '^X_PORT_HTTP_PUBLISHED=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
+				if [ "$$enabled" = "true" ]; then \
+					total_enabled=$$((total_enabled + 1)); \
+					echo -e "    $(COLOR_GREEN)Config:$(COLOR_RESET)   $(COLOR_GREEN)✓ Enabled$(COLOR_RESET)"; \
+				else \
+					echo -e "    $(COLOR_RED)Config:$(COLOR_RESET)   $(COLOR_RED)✗ Disabled$(COLOR_RESET)"; \
+				fi; \
+				if cd $$node_dir && docker compose ps 2>/dev/null | grep -q "Up"; then \
+					echo -e "    $(COLOR_GREEN)Runtime:$(COLOR_RESET)  $(COLOR_GREEN)● Running$(COLOR_RESET)"; \
+					coston_running=$$((coston_running + 1)); \
+					total_running=$$((total_running + 1)); \
+					if [ -n "$$http_port" ]; then \
+						echo -e "    $(COLOR_CYAN)API:$(COLOR_RESET)      http://localhost:$$http_port"; \
+					fi; \
+				else \
+					echo -e "    $(COLOR_YELLOW)Runtime:$(COLOR_RESET)  $(COLOR_YELLOW)○ Stopped$(COLOR_RESET)"; \
+				fi; \
+				cd - > /dev/null 2>&1; \
+			else \
+				echo -e "    $(COLOR_YELLOW)Config:$(COLOR_RESET)   $(COLOR_YELLOW)⚠ No .env file$(COLOR_RESET)"; \
+			fi; \
+			echo ""; \
+		done; \
+	fi; \
+	\
+	if [ -n "$(COSTWO_OBS_NODES)" ]; then \
+		echo -e "$(COLOR_BOLD)$(COLOR_MAGENTA)━━━ COSTWO TESTNET ━━━$(COLOR_RESET)"; \
+		echo ""; \
+		for node_dir in $(COSTWO_OBS_NODES); do \
+			node_name=$$(basename $$node_dir); \
+			costwo_total=$$((costwo_total + 1)); \
+			total_nodes=$$((total_nodes + 1)); \
+			echo -e "  $(COLOR_BOLD)$(COLOR_CYAN)$$node_name$(COLOR_RESET) $(COLOR_YELLOW)[observation]$(COLOR_RESET)"; \
+			if [ -f "$$node_dir/.env" ]; then \
+				enabled=$$(grep '^ENABLED=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
+				http_port=$$(grep '^X_PORT_HTTP_PUBLISHED=' $$node_dir/.env 2>/dev/null | cut -d'=' -f2); \
+				if [ "$$enabled" = "true" ]; then \
+					total_enabled=$$((total_enabled + 1)); \
+					echo -e "    $(COLOR_GREEN)Config:$(COLOR_RESET)   $(COLOR_GREEN)✓ Enabled$(COLOR_RESET)"; \
+				else \
+					echo -e "    $(COLOR_RED)Config:$(COLOR_RESET)   $(COLOR_RED)✗ Disabled$(COLOR_RESET)"; \
+				fi; \
+				if cd $$node_dir && docker compose ps 2>/dev/null | grep -q "Up"; then \
+					echo -e "    $(COLOR_GREEN)Runtime:$(COLOR_RESET)  $(COLOR_GREEN)● Running$(COLOR_RESET)"; \
+					costwo_running=$$((costwo_running + 1)); \
+					total_running=$$((total_running + 1)); \
+					if [ -n "$$http_port" ]; then \
+						echo -e "    $(COLOR_CYAN)API:$(COLOR_RESET)      http://localhost:$$http_port"; \
+					fi; \
+				else \
+					echo -e "    $(COLOR_YELLOW)Runtime:$(COLOR_RESET)  $(COLOR_YELLOW)○ Stopped$(COLOR_RESET)"; \
+				fi; \
+				cd - > /dev/null 2>&1; \
+			else \
+				echo -e "    $(COLOR_YELLOW)Config:$(COLOR_RESET)   $(COLOR_YELLOW)⚠ No .env file$(COLOR_RESET)"; \
+			fi; \
+			echo ""; \
+		done; \
+	fi; \
+	\
+	echo -e "$(COLOR_BOLD)$(COLOR_CYAN)╔════════════════════════════════════════════════════════════╗$(COLOR_RESET)"; \
+	echo -e "$(COLOR_BOLD)$(COLOR_CYAN)║                      Summary                               ║$(COLOR_RESET)"; \
+	echo -e "$(COLOR_BOLD)$(COLOR_CYAN)╚════════════════════════════════════════════════════════════╝$(COLOR_RESET)"; \
+	echo ""; \
+	if [ $$flare_total -gt 0 ]; then \
+		echo -e "$(COLOR_BOLD)$(COLOR_MAGENTA)Flare Mainnet:$(COLOR_RESET)"; \
+		echo -e "  Running:  $(COLOR_GREEN)$$flare_running$(COLOR_RESET) / $$flare_total nodes"; \
+	fi; \
+	if [ $$songbird_total -gt 0 ]; then \
+		echo -e "$(COLOR_BOLD)$(COLOR_MAGENTA)Songbird Canary:$(COLOR_RESET)"; \
+		echo -e "  Running:  $(COLOR_GREEN)$$songbird_running$(COLOR_RESET) / $$songbird_total nodes"; \
+	fi; \
+	if [ $$coston_total -gt 0 ]; then \
+		echo -e "$(COLOR_BOLD)$(COLOR_MAGENTA)Coston Testnet:$(COLOR_RESET)"; \
+		echo -e "  Running:  $(COLOR_GREEN)$$coston_running$(COLOR_RESET) / $$coston_total nodes"; \
+	fi; \
+	if [ $$costwo_total -gt 0 ]; then \
+		echo -e "$(COLOR_BOLD)$(COLOR_MAGENTA)Costwo Testnet:$(COLOR_RESET)"; \
+		echo -e "  Running:  $(COLOR_GREEN)$$costwo_running$(COLOR_RESET) / $$costwo_total nodes"; \
+	fi; \
+	echo ""; \
+	echo -e "$(COLOR_BOLD)Overall:$(COLOR_RESET)"; \
+	echo -e "  Total nodes:     $$total_nodes"; \
+	echo -e "  Enabled nodes:   $(COLOR_GREEN)$$total_enabled$(COLOR_RESET)"; \
+	echo -e "  Running nodes:   $(COLOR_GREEN)$$total_running$(COLOR_RESET)"; \
+	stopped=$$((total_nodes - total_running)); \
+	echo -e "  Stopped nodes:   $(COLOR_YELLOW)$$stopped$(COLOR_RESET)"
 
 # Start all enabled nodes
 nodes-start:

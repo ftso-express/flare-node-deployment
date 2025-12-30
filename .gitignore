@@ -2,6 +2,9 @@
 **/certs/staker.*
 *.env
 
+# Documentation output
+docs/output/
+
 # Allow .gitkeep files in certs directories
 !**/.gitkeep
 !**/certs/**/.gitkeep

@@ -1,1 +1,295 @@
-= flare-node-deployment
+= Flare Node Deployment
+:toc:
+:toclevels: 2
+:icons: font
+
+Dockerized deployment infrastructure for Flare network observation nodes.
+
+== Overview
+
+This repository manages multiple Flare network observation nodes using Docker Compose. Each node runs the Avalanche-based Flare blockchain software (go-flare) and can be independently configured and managed.
+
+=== Key Features
+
+* **Self-contained node deployments** - Each node is independently configurable
+* **ENABLED flag management** - Control which nodes can start via Makefile enforcement
+* **Auto-configuration** - Automatic public IP and bootstrap node discovery
+* **Node ID conflict detection** - Prevents duplicate node identities on network
+* **Flexible logging** - Support for multiple logging backends (local, fluentd, graylog)
+* **Make-based operations** - Simple node management via standardized commands
+
+== Quick Start
+
+[source,bash]
+----
+# Navigate to node directory
+cd network/flare/observation-nodes/node-001
+
+# Create configuration from templates
+cp .env.example .env
+cp node/node.env.example node/node.env
+
+# Edit configuration (set ENABLED=true, configure ports and volumes)
+vi .env
+vi node/node.env
+
+# Start node
+make up
+
+# View logs
+make logs
+
+# Check status
+make status
+----
+
+== Repository Structure
+
+[source]
+----
+.
+├── docs/                                    # Detailed documentation
+│   ├── index.adoc                          # Documentation index
+│   ├── architecture.adoc                   # System architecture
+│   ├── configuration.adoc                  # Configuration reference
+│   ├── setup.adoc                          # Setup guide
+│   └── operations.adoc                     # Operations guide
+├── network/
+│   └── flare/
+│       └── observation-nodes/
+│           ├── node-001/                   # First observation node
+│           │   ├── Makefile               # Node management commands
+│           │   ├── compose.yaml           # Docker Compose config
+│           │   ├── .env.example           # Docker environment template
+│           │   └── node/
+│           │       ├── entrypoint.sh      # Startup script
+│           │       ├── node.env.example   # Runtime config template
+│           │       ├── configs/           # Chain configurations
+│           │       └── certs/             # Node identity (gitignored)
+│           ├── node-002/                   # Second observation node
+│           └── node-003/                   # Third observation node
+├── CLAUDE.md                               # AI assistant guidance
+├── Makefile                                # Root makefile with commands
+└── README.adoc                             # This file
+----
+
+== Makefile Commands
+
+The root Makefile provides convenient commands for managing the entire deployment:
+
+[source,bash]
+----
+# Show all available commands
+make help
+
+# Node management
+make nodes-status    # Show status of all nodes
+make nodes-start     # Start all enabled nodes
+make nodes-stop      # Stop all nodes
+make nodes-logs      # Show logs from all nodes
+
+# Individual node control
+make node-001-up     # Start specific node
+make node-002-status # Check specific node status
+make node-003-logs   # View specific node logs
+
+# Documentation
+make docs-all        # Generate PDF and HTML documentation
+make docs-pdf        # Generate only PDFs
+make docs-html       # Generate only HTML
+
+# Maintenance
+make pull-images     # Pull latest Docker images
+make clean           # Clean generated files
+----
+
+TIP: Run `make` or `make help` from the repository root to see all available commands.
+
+== Documentation
+
+Complete documentation is available in the link:docs/index.adoc[docs/] directory:
+
+* **link:docs/architecture.adoc[Architecture]** - System design, configuration layers, and component architecture
+* **link:docs/configuration.adoc[Configuration Reference]** - Complete variable reference and configuration options
+* **link:docs/setup.adoc[Setup Guide]** - Step-by-step node setup instructions
+* **link:docs/operations.adoc[Operations Guide]** - Daily operations, monitoring, and troubleshooting
+
+TIP: Generate PDF and HTML versions of the documentation with `cd docs && make all`. Output is placed in `docs/output/`.
+
+== Common Operations
+
+=== Start a Node
+
+[source,bash]
+----
+cd network/flare/observation-nodes/node-001
+make up
+----
+
+NOTE: Node must have `ENABLED=true` in `.env` file.
+
+=== Stop a Node
+
+[source,bash]
+----
+cd network/flare/observation-nodes/node-001
+make down
+----
+
+=== View Logs
+
+[source,bash]
+----
+cd network/flare/observation-nodes/node-001
+make logs
+----
+
+=== Check Status
+
+[source,bash]
+----
+cd network/flare/observation-nodes/node-001
+make status
+----
+
+=== Update Node Version
+
+[source,bash]
+----
+cd network/flare/observation-nodes/node-001
+
+# Stop node
+make down
+
+# Update version in .env
+# X_DOCKER_COMPOSE_IMAGE=flarefoundation/go-flare:v1.13.0
+
+# Pull new image and start
+docker compose pull
+make up
+----
+
+== Configuration Overview
+
+=== Two-Layer Configuration
+
+Each node uses two separate configuration files:
+
+[cols="1,1,3"]
+|===
+|File |Purpose |Variables
+
+|`.env`
+|Docker Compose
+|Container name, ports, volumes, logging (X_* prefixed)
+
+|`node/node.env`
+|Node runtime
+|Network settings, auto-configuration, API settings
+|===
+
+=== ENABLED Flag
+
+Control node startup with the `ENABLED` flag in `.env`:
+
+[source,bash]
+----
+ENABLED=true    # Node can be started via make up
+ENABLED=false   # Makefile prevents startup
+----
+
+=== Port Configuration
+
+Each node requires unique ports when running on the same host:
+
+[cols="1,1,3"]
+|===
+|Port |Default |Purpose
+
+|HTTP API
+|9650
+|JSON-RPC API, health checks
+
+|Staking
+|9651
+|P2P consensus communication
+|===
+
+=== Volume Management
+
+Blockchain data and logs are stored in host directories configured via:
+
+[source,bash]
+----
+X_VOLUME_NODE_DATA_DEVICE=/var/lib/flare/volumes/node-001-data/
+X_VOLUME_NODE_LOGS_DEVICE=/var/lib/flare/volumes/node-001-logs/
+----
+
+IMPORTANT: Directories must exist before starting containers.
+
+== Prerequisites
+
+* Docker Engine 20.10+
+* Docker Compose V2
+* 500GB+ disk space (for full history nodes)
+* Stable internet connection
+* Firewall configuration for ports 9650, 9651
+
+== Security Considerations
+
+* Staking certificates (`staker.crt`, `staker.key`) define node identity and are gitignored
+* Never reuse certificates across multiple running nodes - causes network conflicts
+* Admin APIs are disabled by default in chain configuration
+* Environment files (`.env`, `node/node.env`) are gitignored to prevent credential exposure
+
+== Monitoring
+
+Basic health check:
+
+[source,bash]
+----
+# Check if node is bootstrapped
+curl -sX POST --data '{"jsonrpc":"2.0","id":1,"method":"info.isBootstrapped","params":{"chain":"C"}}' \
+  -H 'content-type:application/json;' \
+  http://localhost:9650/ext/info | jq .
+
+# Check peer count
+curl -sX POST --data '{"jsonrpc":"2.0","id":1,"method":"info.peers"}' \
+  -H 'content-type:application/json;' \
+  http://localhost:9650/ext/info | jq '.result.peers | length'
+----
+
+For comprehensive monitoring guidance, see link:docs/operations.adoc#monitoring[Operations Guide - Monitoring].
+
+== Troubleshooting
+
+Common issues:
+
+* **"Node is disabled"** - Set `ENABLED=true` in `.env`
+* **"Port already in use"** - Configure unique ports in `.env`
+* **"Volume not found"** - Create host directories before starting
+* **"Node ID conflict"** - Use different staking certificates or disable conflict check
+
+For detailed troubleshooting, see link:docs/setup.adoc#troubleshooting[Setup Guide - Troubleshooting] and link:docs/operations.adoc#troubleshooting-operations[Operations Guide - Troubleshooting].
+
+== Node Types
+
+The deployment includes configuration templates for different node types:
+
+* **Observer** (`config.json.observer`) - Read-only nodes for RPC access (current default)
+* **Validator** (`config.json.validator`) - Active validation nodes (requires stake)
+* **Development** (`config.json.dev`) - Development and testing configurations
+
+== Support
+
+For detailed information:
+
+* Start with link:docs/index.adoc[Documentation Index]
+* Review link:docs/architecture.adoc[Architecture] to understand the system
+* Follow link:docs/setup.adoc[Setup Guide] for new deployments
+* Reference link:docs/operations.adoc[Operations Guide] for ongoing management
+* Check link:docs/configuration.adoc[Configuration Reference] for all variables
+
+== License
+
+See individual component licenses. Flare network software is developed by Flare Foundation.
